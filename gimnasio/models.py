@@ -11,6 +11,8 @@ class Usuario(AbstractUser):
     rol = models.IntegerField(choices=Rol.choices, default=Rol.ALUMNO)
     es_seleccionado = models.BooleanField(default=False)
     rama_deportiva = models.CharField(max_length=100, blank=True, null=True) # Ej: Balonmano, Fútbol
+    rut = models.CharField(max_length=20, unique=True, null=True, blank=True)
+    carrera = models.CharField(max_length=100, null=True, blank=True)
     
     # Sistema de Penalizaciones (No-Show)
     inasistencias_acumuladas = models.PositiveIntegerField(default=0)
@@ -56,20 +58,53 @@ class DetalleRutina(models.Model):
     notas = models.CharField(max_length=255, blank=True, null=True)
 
 
-class DiaSemana(models.TextChoices):
-    LUNES = 'LU', 'Lunes'
-    MARTES = 'MA', 'Martes'
-    MIERCOLES = 'MI', 'Miércoles'
-    JUEVES = 'JU', 'Jueves'
-    VIERNES = 'VI', 'Viernes'
+DIAS_SEMANA = [
+    ('LU', 'Lunes'),
+    ('MA', 'Martes'),
+    ('MI', 'Miércoles'),
+    ('JU', 'Jueves'),
+    ('VI', 'Viernes'),
+    ('SA', 'Sábado'),
+]
 
 class BloqueHorario(models.Model):
-    dia = models.CharField(max_length=2, choices=DiaSemana.choices)
+    BLOQUES_ESTANDAR = [
+        ('B1', 'Bloque 1 (08:15 - 09:25)'),
+        ('B2', 'Bloque 2 (09:40 - 10:50)'),
+        ('B3', 'Bloque 3 (11:05 - 12:15)'),
+        ('B4', 'Bloque 4 (12:30 - 13:40)'),
+        ('B5', 'Bloque 5 (14:40 - 15:50)'),
+        ('B6', 'Bloque 6 (16:05 - 17:15)'),
+        ('B7', 'Bloque 7 (17:30 - 18:40)'),
+        ('B8', 'Bloque 8 (18:50 - 20:00)'), 
+    ]
+
+    dia = models.CharField(max_length=2, choices=DIAS_SEMANA)
+    codigo_bloque = models.CharField(max_length=2, choices=BLOQUES_ESTANDAR, null=True, blank=True)
     hora_inicio = models.TimeField()
     hora_fin = models.TimeField()
-    aforo_regular = models.PositiveIntegerField(default=20)
-    sobrecupos_seleccionados = models.PositiveIntegerField(default=5)
-    entrenador_a_cargo = models.ForeignKey(Usuario, on_delete=models.SET_NULL, null=True, blank=True, related_name='bloques_asignados')
+    aforo_regular = models.IntegerField(default=20)
+    entrenador_a_cargo = models.ForeignKey('Usuario', on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'rol': 2})
+
+    def save(self, *args, **kwargs):
+        # Mapeo automático de horas exactas
+        horas = {
+            'B1': ("08:15", "09:25"),
+            'B2': ("09:40", "10:50"),
+            'B3': ("11:05", "12:15"),
+            'B4': ("12:30", "13:40"),
+            'B5': ("14:40", "15:50"),
+            'B6': ("16:05", "17:15"),
+            'B7': ("17:30", "18:40"),
+            'B8': ("18:50", "20:00"), 
+        }
+        if self.codigo_bloque in horas:
+            self.hora_inicio, self.hora_fin = horas[self.codigo_bloque]
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.get_dia_display()} - {self.codigo_bloque if self.codigo_bloque else self.hora_inicio}"
+
 
 class EstadoAsistencia(models.TextChoices):
     PENDIENTE = 'PEN', 'Pendiente'

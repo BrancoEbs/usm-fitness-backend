@@ -5,8 +5,16 @@ from .models import (
     DetalleRutina, BloqueHorario, Reserva, Notificacion
 )
 
-# Registramos el usuario personalizado usando la vista optimizada de Django
-admin.site.register(Usuario, UserAdmin)
+# Creamos una clase personalizada para decirle a Django qué campos extra mostrar
+class CustomUserAdmin(UserAdmin):
+    fieldsets = UserAdmin.fieldsets + (
+        ('Datos del Gimnasio', {
+            'fields': ('rol', 'es_seleccionado', 'rama_deportiva', 'inasistencias_acumuladas', 'bloqueado_hasta'),
+        }),
+    )
+
+# Registramos el usuario con nuestra nueva clase
+admin.site.register(Usuario, CustomUserAdmin)
 
 # Registramos el resto de los modelos
 admin.site.register(FichaFisica)
