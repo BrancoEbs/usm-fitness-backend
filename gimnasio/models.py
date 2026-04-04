@@ -80,6 +80,7 @@ class BloqueHorario(models.Model):
     ]
 
     dia = models.CharField(max_length=2, choices=DIAS_SEMANA)
+    fecha = models.DateField(null=True, blank=True)
     codigo_bloque = models.CharField(max_length=2, choices=BLOQUES_ESTANDAR, null=True, blank=True)
     hora_inicio = models.TimeField()
     hora_fin = models.TimeField()
@@ -126,3 +127,20 @@ class Notificacion(models.Model):
     mensaje = models.TextField()
     fecha_creacion = models.DateTimeField(auto_now_add=True)
     leida = models.BooleanField(default=False)
+
+class ConfiguracionGimnasio(models.Model):
+    gimnasio_abierto = models.BooleanField(default=True)
+    mensaje_cierre = models.CharField(
+        max_length=255, 
+        default="El gimnasio se encuentra cerrado por receso universitario o mantención."
+    )
+
+    def save(self, *args, **kwargs):
+        self.pk = 1 # Truco Singleton: Forzamos a que siempre reemplace la fila 1
+        super(ConfiguracionGimnasio, self).save(*args, **kwargs)
+
+    @classmethod
+    def load(cls):
+        # Si no existe la configuración, la crea. Si existe, la trae.
+        obj, created = cls.objects.get_or_create(pk=1)
+        return obj
