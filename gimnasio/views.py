@@ -1,10 +1,10 @@
-from rest_framework import viewsets, permissions, status, generics
+from rest_framework import viewsets, permissions, status
 from rest_framework.permissions import AllowAny
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.contrib.auth.hashers import make_password
-from datetime import date, timedelta
+from datetime import timedelta
 from .models import BloqueHorario, Reserva, Usuario, FichaFisica, EjercicioCatalogo, PlanEntrenamiento, DetalleRutina, ConfiguracionGimnasio
 from .serializers import BloqueHorarioSerializer, ReservaSerializer, UsuarioResumenSerializer, FichaFisicaSerializer, EjercicioCatalogoSerializer, PlanEntrenamientoSerializer, DetalleRutinaSerializer, RegistroSerializer, ConfiguracionSerializer
 from django.db.models import Q
@@ -36,7 +36,7 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         # 3. Para todo lo demás (ver perfil, etc), debes haber iniciado sesión
         return [permissions.IsAuthenticated()]
 
-    @action(detail=False, methods=['post'], permission_classes=[AllowAny], authentication_classes=[])
+    @action(detail=False, methods=['post'], authentication_classes=[])
     def registro(self, request):
         # Usamos tu serializador especializado para el registro
         serializer = RegistroSerializer(data=request.data)
@@ -103,10 +103,6 @@ class BloqueHorarioViewSet(viewsets.ModelViewSet):
     def _generar_bloques_semana(self, lunes):
         dias = ['LU', 'MA', 'MI', 'JU', 'VI']
         codigos = ['B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B8']
-        horas = {
-            'B1': "08:15", 'B2': "09:40", 'B3': "11:05", 'B4': "12:30",
-            'B5': "14:40", 'B6': "16:05", 'B7': "17:30", 'B8': "18:50", 
-        }
         
         for i, dia in enumerate(dias):
             fecha_actual = lunes + timedelta(days=i)
@@ -122,8 +118,6 @@ class BloqueHorarioViewSet(viewsets.ModelViewSet):
                         fecha=fecha_actual,
                         dia=dia,
                         codigo_bloque=codigo,
-                        hora_inicio=horas[codigo],
-                        hora_fin=horas[codigo],
                         aforo_regular=aforo,
                         entrenador_a_cargo=entrenador
                     )
@@ -243,8 +237,37 @@ class ReservaViewSet(viewsets.ModelViewSet):
 class FichaFisicaViewSet(viewsets.ModelViewSet):
     serializer_class = FichaFisicaSerializer
     permission_classes = [permissions.IsAuthenticated]
+
     def get_queryset(self):
-        return FichaFisica.objects.filter(usuario=self.request.user)
+        user = self.request.user
+        # Si es Entrenador o Admin, puede ver todas las fichas. Si es alumno, solo la suya.
+        if user.rol in [2, 3]:
+            return FichaFisica.objects.all()
+        return FichaFisica.objects.filter(usuario=user)
+
+    # NUEVO: Endpoint para buscar la ficha de un alumno específico
+    @action(detail=False, methods=['get'], permission_classes=[IsTrainerOrAdmin])
+    def por_alumno(self, request):
+        alumno_id = request.query_params.get('alumno_id')
+        if not alumno_id:
+            return Response({"error": "Falta alumno_id"}, status=400)
+        try:
+            ficha = FichaFisica.objects.get(usuario_id=alumno_id)
+            serializer = self.get_serializer(ficha)
+            return Response(serializer.data)
+        except FichaFisica.DoesNotExist:
+            return Response({"error": "Este alumno aún no ha completado su Ficha Física."}, status=404)
+
+    # NUEVO: Acción exclusiva para que el entrenador ponga notas (Ignora el read_only_field)
+    @action(detail=True, methods=['patch'], permission_classes=[IsTrainerOrAdmin])
+    def actualizar_nota(self, request, pk=None):
+        ficha = self.get_object()
+        nota = request.data.get('observaciones_entrenador', '')
+        
+        ficha.observaciones_entrenador = nota
+        ficha.save()
+        
+        return Response({'mensaje': 'Observaciones actualizadas con éxito.', 'observaciones_entrenador': nota})
 
 class EjercicioCatalogoViewSet(viewsets.ModelViewSet):
     queryset = EjercicioCatalogo.objects.all()
@@ -260,6 +283,12 @@ class PlanEntrenamientoViewSet(viewsets.ModelViewSet):
     serializer_class = PlanEntrenamientoSerializer
     
     def get_queryset(self):
+        # --- MAGIA AUTO-ELIMINADORA ---
+        hoy = timezone.localtime(timezone.now()).date()
+        # Elimina silenciosamente cualquier plan cuya fecha de vencimiento sea anterior a hoy
+        PlanEntrenamiento.objects.filter(fecha_vencimiento__lt=hoy).delete()
+        # ------------------------------
+
         user = self.request.user
         if user.rol in [2, 3]:
             return PlanEntrenamiento.objects.all().order_by('-fecha_vencimiento')

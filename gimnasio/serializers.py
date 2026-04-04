@@ -1,11 +1,12 @@
 from rest_framework import serializers
 from .models import Usuario, BloqueHorario, Reserva, FichaFisica, EjercicioCatalogo, PlanEntrenamiento, DetalleRutina, ConfiguracionGimnasio
 from datetime import timedelta, date
+from django.contrib.auth.hashers import make_password 
 
 class UsuarioResumenSerializer(serializers.ModelSerializer):
     class Meta:
         model = Usuario
-        fields = ['id', 'first_name', 'last_name', 'es_seleccionado', 'rol', 'username', 'rama_deportiva']
+        fields = ['id', 'first_name', 'last_name', 'es_seleccionado', 'rol', 'username', 'rama_deportiva','carrera']
 
 class FichaFisicaSerializer(serializers.ModelSerializer):
     usuario = serializers.HiddenField(default=serializers.CurrentUserDefault())
@@ -89,7 +90,6 @@ class ReservaSerializer(serializers.ModelSerializer):
             
         return data
 
-
 class EjercicioCatalogoSerializer(serializers.ModelSerializer):
     class Meta:
         model = EjercicioCatalogo
@@ -111,9 +111,6 @@ class PlanEntrenamientoSerializer(serializers.ModelSerializer):
         model = PlanEntrenamiento
         # AÑADIMOS 'alumno_asignado' a la lista
         fields = ['id', 'titulo', 'es_global', 'alumno_asignado', 'archivo_adjunto', 'fecha_vencimiento', 'creado_por_nombre', 'rutina_interactiva']
-
-
-from django.contrib.auth.hashers import make_password # Asegúrate de importar esto arriba del todo
 
 class RegistroSerializer(serializers.ModelSerializer):
     class Meta:
