@@ -9,13 +9,17 @@ class UsuarioResumenSerializer(serializers.ModelSerializer):
         fields = ['id', 'first_name', 'last_name', 'es_seleccionado', 'rol', 'username', 'rama_deportiva','carrera']
 
 class FichaFisicaSerializer(serializers.ModelSerializer):
-    usuario = serializers.HiddenField(default=serializers.CurrentUserDefault())
-    
     class Meta:
         model = FichaFisica
-        # Agregamos 'lesiones_previas' a la lista de campos
-        fields = ['id', 'usuario', 'peso_kg', 'estatura_cm', 'lesiones_previas', 'objetivo_principal', 'observaciones_entrenador']
-        read_only_fields = ['observaciones_entrenador']
+        fields = [
+            'id', 'usuario', 'carrera_normalizada', 'peso_kg', 'estatura_cm', 
+            'porcentaje_grasa', 'masa_muscular', 'perimetro_cintura',
+            'condicion_cardiaca', 'dolor_pecho', 'mareos_desmayos',
+            'lesion_articular', 'medicacion_presion', 'recomendacion_medica',
+            'lesiones_previas', 'objetivo_principal', 'observaciones_entrenador',
+            'fecha_actualizacion'
+        ]
+        read_only_fields = ['usuario', 'fecha_actualizacion']
 
 class BloqueHorarioSerializer(serializers.ModelSerializer):
     entrenador_nombre = serializers.CharField(source='entrenador_a_cargo.get_full_name', read_only=True)

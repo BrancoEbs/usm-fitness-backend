@@ -237,6 +237,10 @@ class ReservaViewSet(viewsets.ModelViewSet):
 class FichaFisicaViewSet(viewsets.ModelViewSet):
     serializer_class = FichaFisicaSerializer
     permission_classes = [permissions.IsAuthenticated]
+    
+    def perform_create(self, serializer):
+        # Interceptamos el guardado y le inyectamos el usuario que viene en el Token
+        serializer.save(usuario=self.request.user)
 
     def get_queryset(self):
         user = self.request.user

@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
+from django.conf import settings
 
 class Rol(models.IntegerChoices):
     ALUMNO = 1, 'Alumno Regular'
@@ -23,15 +24,36 @@ class Usuario(AbstractUser):
             return timezone.now() < self.bloqueado_hasta
         return False
 
-
 class FichaFisica(models.Model):
-    usuario = models.OneToOneField(Usuario, on_delete=models.CASCADE, related_name='ficha')
-    peso_kg = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
-    estatura_cm = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
-    fecha_evaluacion = models.DateField(auto_now_add=True)
+    usuario = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='ficha')
+    
+    # Datos Académicos Normalizados
+    carrera_normalizada = models.CharField(max_length=100, blank=True, null=True)
+    
+    # Composición Corporal
+    peso_kg = models.DecimalField(max_digits=5, decimal_places=2)
+    estatura_cm = models.IntegerField()
+    porcentaje_grasa = models.DecimalField(max_digits=4, decimal_places=1, blank=True, null=True)
+    masa_muscular = models.DecimalField(max_digits=4, decimal_places=1, blank=True, null=True)
+    perimetro_cintura = models.DecimalField(max_digits=5, decimal_places=1, blank=True, null=True)
+    
+    # Cuestionario PAR-Q+ (Salud)
+    condicion_cardiaca = models.BooleanField(default=False)
+    dolor_pecho = models.BooleanField(default=False)
+    mareos_desmayos = models.BooleanField(default=False)
+    lesion_articular = models.BooleanField(default=False)
+    medicacion_presion = models.BooleanField(default=False)
+    recomendacion_medica = models.BooleanField(default=False)
+    
+    # Notas y Objetivos
     lesiones_previas = models.TextField(blank=True, null=True)
-    objetivo_principal = models.CharField(max_length=200, blank=True, null=True)
+    objetivo_principal = models.TextField(blank=True, null=True)
     observaciones_entrenador = models.TextField(blank=True, null=True)
+    
+    fecha_actualizacion = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Ficha de {self.usuario.first_name} - {self.usuario.username}"
 
 class EjercicioCatalogo(models.Model):
     nombre = models.CharField(max_length=150)
