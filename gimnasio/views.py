@@ -3,6 +3,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.exceptions import ValidationError
 from django.contrib.auth.hashers import make_password
 from datetime import timedelta
 from .models import BloqueHorario, Reserva, Usuario, FichaFisica, EjercicioCatalogo, PlanEntrenamiento, DetalleRutina, ConfiguracionGimnasio
@@ -11,6 +12,7 @@ from django.db.models import Q
 from django.db import transaction
 from django.utils import timezone
 from datetime import timedelta
+
 
 class IsAdminUserRole(permissions.BasePermission):
     def has_permission(self, request, view):
@@ -128,27 +130,36 @@ class BloqueHorarioViewSet(viewsets.ModelViewSet):
         hoy = ahora.date()
         hora_actual = ahora.time()
 
+        # 1. Calculamos los límites de la semana actual (Lunes a Domingo)
+        lunes_actual = hoy - timedelta(days=hoy.weekday())
+        domingo_actual = lunes_actual + timedelta(days=6)
+
         # --- MAGIA AUTO-GENERADORA ---
         if hoy.weekday() >= 5: # Si es Sábado (5) o Domingo (6)
             lunes_proximo = hoy + timedelta(days=(7 - hoy.weekday()))
             if not BloqueHorario.objects.filter(fecha=lunes_proximo).exists():
                 self._generar_bloques_semana(lunes_proximo)
         else: # Si es Lunes a Viernes
-            lunes_actual = hoy - timedelta(days=hoy.weekday())
             if not BloqueHorario.objects.filter(fecha=lunes_actual).exists():
                 self._generar_bloques_semana(lunes_actual)
         # -----------------------------
 
-        # Limpieza de bloques pasados
+        # Limpieza de bloques pasados (Nota: Considera mover esto a un CronJob a futuro)
         bloques_pasados = BloqueHorario.objects.filter(
             Q(fecha__lt=hoy) | Q(fecha=hoy, hora_fin__lt=hora_actual)
         )
         Reserva.objects.filter(bloque__in=bloques_pasados, estado='PEN').update(estado='AUS')
 
         user = self.request.user
-        if user.rol in [2, 3]:
-            return BloqueHorario.objects.all().order_by('-fecha', 'hora_inicio')
         
+        # --- NUEVO FILTRO PARA EL STAFF ---
+        if user.rol in [2, 3]:
+            # Retorna estrictamente los bloques de la semana en curso
+            return BloqueHorario.objects.filter(
+                fecha__range=[lunes_actual, domingo_actual]
+            ).order_by('fecha', 'hora_inicio')
+        
+        # --- FILTRO PARA ALUMNOS (Sigue intacto) ---
         return BloqueHorario.objects.filter(
             Q(fecha__gt=hoy) | Q(fecha=hoy, hora_inicio__gte=hora_actual)
         ).order_by('fecha', 'hora_inicio')
@@ -230,8 +241,24 @@ class ReservaViewSet(viewsets.ModelViewSet):
         reserva.save()
         return Response({'mensaje': 'Asistencia registrada', 'estado_actual': estado})
 
-    @transaction.atomic  # <-- Esto crea la transacción segura
+    @transaction.atomic
     def create(self, request, *args, **kwargs):
+        bloque_id = request.data.get('bloque')
+        
+        try:
+            bloque = BloqueHorario.objects.get(id=bloque_id)
+        except BloqueHorario.DoesNotExist:
+            raise ValidationError({"error": "El bloque no existe."})
+
+        # 1. Validar que el alumno no tenga ya una reserva en ese bloque
+        if Reserva.objects.filter(bloque=bloque, alumno=request.user, estado__in=['PEN', 'PRE']).exists():
+            raise ValidationError({"error": "Ya tienes una reserva activa para este horario."})
+
+        # 2. Validar aforo máximo
+        reservas_actuales = Reserva.objects.filter(bloque=bloque, estado__in=['PEN', 'PRE']).count()
+        if reservas_actuales >= bloque.aforo_regular:
+            raise ValidationError({"error": "El bloque está lleno. No quedan cupos disponibles."})
+
         return super().create(request, *args, **kwargs)
 
 class FichaFisicaViewSet(viewsets.ModelViewSet):
@@ -287,16 +314,16 @@ class PlanEntrenamientoViewSet(viewsets.ModelViewSet):
     serializer_class = PlanEntrenamientoSerializer
     
     def get_queryset(self):
-        # --- MAGIA AUTO-ELIMINADORA ---
         hoy = timezone.localtime(timezone.now()).date()
-        # Elimina silenciosamente cualquier plan cuya fecha de vencimiento sea anterior a hoy
-        PlanEntrenamiento.objects.filter(fecha_vencimiento__lt=hoy).delete()
-        # ------------------------------
-
         user = self.request.user
+
+        # BUENA PRÁCTICA: Filtrar en lugar de usar .delete() dentro del GET
+        base_query = PlanEntrenamiento.objects.filter(fecha_vencimiento__gte=hoy)
+
         if user.rol in [2, 3]:
-            return PlanEntrenamiento.objects.all().order_by('-fecha_vencimiento')
-        return PlanEntrenamiento.objects.filter(
+            return base_query.order_by('-fecha_vencimiento')
+            
+        return base_query.filter(
             Q(es_global=True) | Q(alumno_asignado=user)
         ).order_by('-fecha_vencimiento')
 
