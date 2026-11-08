@@ -1,5 +1,7 @@
-Django==5.0.4
-djangorestframework==3.15.2
-djangorestframework-simplejwt
-django-cors-headers
-drf-yasg
+Django==5.2.19
+djangorestframework==3.16.1
+djangorestframework-simplejwt==5.5.1
+django-cors-headers==4.9.0
+drf-yasg==1.21.18
+psycopg[binary]==3.2.3
+gunicorn==23.0.0
