@@ -172,6 +172,9 @@ REST_FRAMEWORK = {
         'login': os.environ.get('THROTTLE_LOGIN', '10/min'),
         'registro': os.environ.get('THROTTLE_REGISTRO', '5/hour'),
     },
+    # Cantidad de proxies (Nginx) delante de Django: permite usar la IP real del
+    # cliente en los límites de intentos sin aceptar X-Forwarded-For falsificados.
+    'NUM_PROXIES': int(os.environ['NUM_PROXIES']) if os.environ.get('NUM_PROXIES') else (None if DEBUG else 1),
 }
 
 SIMPLE_JWT = {
